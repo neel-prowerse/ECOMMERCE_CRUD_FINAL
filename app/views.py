@@ -1,6 +1,6 @@
 from django.shortcuts import render,redirect
 from .models import Mobile,Company,Cart, Order
-from django.contrib.auth import login,logout,authenticate
+from django.contrib.auth import login,logout,authenticate,get_user_model
 from django.contrib.auth.forms import AuthenticationForm
 from .forms import UserCreateForm,MobileForm
 from django.contrib.auth.models import User
@@ -11,6 +11,8 @@ from django.http import HttpResponseRedirect
 from django.urls import reverse
 from django.conf import settings
 from django.core.mail import send_mail
+from django.template.loader import get_template
+from django.core.mail import EmailMessage
 # Create your views here.
 
 # This is index it consists of dropdown logic
@@ -92,7 +94,7 @@ def showid(request,id):
 # This is edit logic for editing an existing product
 def edit(request,id):
     mobile = Mobile.objects.get(id=id)
-    return render(request,'edit.html',{'mobile':mobile})
+    return render(request, 'edit.html', {'mobile':mobile})
 
 # This is update logic for editing an existing product
 def update(request, id):
@@ -119,18 +121,23 @@ def delete(request, id):
 # This is register logic through this we can register or sign-up
 def register(request):
     if request.method == 'GET':
-        return render(request,'register.html',{'form':UserCreateForm})
+        return render(request, 'register.html', {'form':UserCreateForm})
     else:
         if request.POST['password1'] == request.POST['password2']:
             try:
-                user = User.objects.create_user(request.POST['username'],password=request.POST['password1'],email=request.POST['email'])
+                user = User.objects.create_user(request.POST['username'], password=request.POST['password1'], email=request.POST['email'])
                 user.save()
+                userModel = get_user_model()
+                data = userModel.objects.get(id = user.id)
                 login(request,user)
                 subject = 'Registration Complete'
-                message = f'Hello {request.POST["username"]}, Thank You for Registering account in ECOMMERCE.'
+                ctx = {'user': data.username}
+                message = get_template('email.html').render(ctx)
                 email_from = settings.EMAIL_HOST_USER
                 recipient_list = [user.email]
-                send_mail(subject,message,email_from,recipient_list, fail_silently=True)
+                msg = EmailMessage(subject,message,email_from,recipient_list)
+                msg.content_subtype = "html"  # Main content is now text/html
+                msg.send()
                 return redirect('loginaccount')
             except IntegrityError:
                 return render(request,'register.html',{'form':UserCreateForm,'error':'Username already exists.'})
@@ -142,7 +149,7 @@ def loginaccount(request):
     if request.method == 'GET':
         return render(request, 'login.html',{'form':AuthenticationForm})
     else:
-        user = authenticate(request, username = request.POST['username'],password = request.POST['password'])
+        user = authenticate(request, username = request.POST['username'], password = request.POST['password'])
         if user is None:
             return render(request, 'login.html',{'form':AuthenticationForm(),'error':'Username and Password do not match'})
         else:
